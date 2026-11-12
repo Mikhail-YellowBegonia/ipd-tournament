@@ -47,15 +47,13 @@
 
 ### Axelrod 适配器
 
-`ipd/pool/axl.py` 提供 `axelrod_agents()` 函数，将 [Axelrod](https://github.com/Axelrod-Python/Axelrod) 策略库中的策略适配为我方模拟器接口。要点：
+`ipd/pool/axl.py` 的 `axelrod_agents()` 把 axelrod 4.14.0 的策略包装为 Agent（layer "AXL"，名字前缀 `axl:`），仅训练端使用（`requirements-train.txt`）。
 
-- **状态管理**：Axelrod 的 Player 对象有状态，每场对局维护独立实例；历史不匹配时通过重放恢复状态
-- **格式转换**：Axelrod 使用 `'C'/'D'`，我方使用 `'c'/'b'`
-- **收益映射**：Axelrod 的 Game 固定，我方分阶段变化；选用第 0 阶段收益 `(T=4, S=-6, R=2, P=-1)` 作为映射（占比最大且策略初始化时需要）
-- **过滤规则**：排除作弊策略（`inspects_source` / `manipulates_source` / `manipulates_state`）、无法构造或崩溃的策略；`long_run_time` 策略需显式包含
-- **可重现性**：从全局 `random` 模块为每个策略实例设置种子
-
-仅训练端依赖（`requirements-train.txt`），评测端不依赖 axelrod 包。
+- **状态**：每场一个 Player 实例。正常路径每回合写入模拟器记录的实际动作；记录不一致时用同一种子逐回合"调用 strategy() 再写入动作"重放，与 `axl.Match` 的顺序一致。
+- **收益映射**：使用第 0 阶段收益 (4, −6, 2, −1)；三个阶段大小顺序相同。ZD 系与 Meta*MemoryOne 共 9 个策略在该收益下概率越界，退回默认收益 (5, 0, 3, 1)，在 `Agent.params["game"]` 中标记。
+- **排除**：Darwin（作弊）；19 个 long_run_time 策略默认排除，可用 `include_long_run_time=True` 加入。默认 224 个。
+- **验证**：152 个确定性策略与 `axl.Match` 逐手一致；所有策略在模拟器中 0 故障；不吞异常。
+- **耗时**：`python -m ipd.pool.axl_perf`，中位数约 0.005 ms/决策；最慢为 Meta*MemoryOne（均值约 1 ms）。
 
 - 每个家族的参数随机采样，而非只放标准版本。
 - 加噪声版本（1–15% 失误）和"出错退化为 AllC"版本。

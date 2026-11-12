@@ -8,8 +8,8 @@
 |---|---|---|---|
 | 1 | 模拟器 v0（按规则摘要实现） | ✅ | `ipd/sim`；未知项在 `TournamentConfig`，待调试包对齐 |
 | 2 | 对手池 L0–L2 | ✅ | `ipd/pool`；21 个族，参数随机采样 |
-| 2a | Axelrod 策略库适配器 | ✅ | `ipd/pool/axl.py`；排除作弊策略，支持状态重放 |
-| 2b | 移植 Axelrod 演化策略（EvolvedANN 等） | ⬜ | ADR 0005 |
+| 2a | Axelrod 策略库适配器 | ✅ | `ipd/pool/axl.py`；224 个策略；实验 0003 |
+| 2b | 移植 Axelrod 演化策略（EvolvedANN 等） | ✅ | 由 2a 适配器覆盖（训练端），无需纯 Python 移植 |
 | 3 | 检测器库 | ✅ | `ipd/detectors`；单次遍历，完整历史约 0.12 ms |
 | 4 | 对手池 L3 | ✅ | `ipd/pool/l3.py`；4 个读历史包装器族 |
 | 5 | 手工基线（参照尺） | ⬜ | issue #1；对手建模 + 动态规划最优应对 |

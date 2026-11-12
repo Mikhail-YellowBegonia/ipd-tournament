@@ -1,159 +1,102 @@
-"""测试 Axelrod 策略适配器。"""
-
+import random
 import unittest
 
 try:
     import axelrod as axl
-    AXELROD_AVAILABLE = True
 except ImportError:
-    AXELROD_AVAILABLE = False
+    axl = None
 
-if AXELROD_AVAILABLE:
-    from ipd.pool.axl import axelrod_agents
-    from ipd.pool import canonical
-    from ipd.sim.tournament import run_tournament
-    from ipd.sim.config import TournamentConfig
+from ipd.pool import make_agent
+from ipd.sim import TournamentConfig, run_tournament
+
+if axl is not None:
+    from ipd.pool.axl import GAME, axelrod_agents, excluded_strategies
+
+PATTERN = "CCDCDDCCCD"
 
 
-@unittest.skipIf(not AXELROD_AVAILABLE, "axelrod library not available")
-class TestAxelrodAdapter(unittest.TestCase):
-    """测试 Axelrod 策略适配器的正确性。"""
+def to_ours(actions):
+    return "".join("c" if a == axl.Action.C else "b" for a in actions)
 
-    def test_all_agents_complete_tournament(self):
-        """所有适配的策略都能完成锦标赛且零故障。"""
-        axl_agents = axelrod_agents(include_long_run_time=False)
 
-        # 确保至少有一些策略被加载
-        self.assertGreater(len(axl_agents), 0, "No axelrod agents loaded")
+def play_against(agent, opp, rs=0):
+    """让适配后的策略对一个固定动作序列出手。"""
+    mine = []
+    for t in range(25):
+        mine.append(agent.fn(rs, t, 1, tuple(mine), 2, tuple(opp[:t]), None, None, None))
+    return "".join(mine)
 
-        # 选择一小部分标准对手进行测试
-        standard_opponents = [
-            a for a in canonical()
-            if a.family in ["all_c", "all_d", "tft"]
-        ]
 
-        # 每个 Axelrod 策略都与标准对手进行小型锦标赛
-        # 为了速度，我们只测试前几个
-        for agent in axl_agents[:10]:
-            with self.subTest(agent=agent.name):
-                field = [agent] + standard_opponents
-                cfg = TournamentConfig(rounds=2)
-                result = run_tournament(field, seed=42, cfg=cfg)
+@unittest.skipIf(axl is None, "axelrod not installed")
+class AxelrodAdapterTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.agents = axelrod_agents()
+        cls.classes = {s.__name__: s for s in axl.all_strategies}
 
-                # 检查该策略的故障次数
-                agent_idx = 0  # agent 在列表首位
-                faults = result.faults[agent_idx]
-                self.assertEqual(
-                    faults, 0,
-                    f"{agent.name} had {faults} faults"
-                )
+    def test_exclusions(self):
+        excluded = excluded_strategies()
+        names = {a.family for a in self.agents}
+        self.assertFalse(names & set(excluded))
+        self.assertEqual(len(names) + len(excluded), len(axl.all_strategies))
+        self.assertEqual(excluded.get("Darwin"), "cheating")
+        self.assertEqual(excluded.get("EvolvedAttention"), "long_run_time")
 
-    def test_deterministic_strategy_consistency(self):
-        """确定性策略通过我方适配器的输出应与 axelrod 自己的匹配一致。"""
-        # TitForTat 是确定性策略
-        if not hasattr(axl, "TitForTat"):
-            self.skipTest("TitForTat not available")
-
-        agents = axelrod_agents(names=["TitForTat"])
-        self.assertEqual(len(agents), 1)
-        adapted = agents[0]
-
-        # 创建原生 axelrod 匹配
-        axl_tft = axl.TitForTat()
-        axl_defector = axl.Defector()
-        axl_match = axl.Match([axl_tft, axl_defector], turns=25)
-        axl_result = axl_match.play()
-
-        # 通过我方适配器模拟相同的对局
-        # 模拟器会调用策略函数，我们需要手动调用
-        our_moves = []
-        opp_moves = []
-
-        for length in range(25):
-            my = tuple(our_moves)
-            opp = tuple(opp_moves)
-
-            # 调用我方适配的策略
-            move = adapted.fn(
-                rs=0,
-                length=length,
-                my_id=1,
-                my=my,
-                opp_id=2,
-                opp=opp,
-                repay=None,  # 策略不使用
-                oh=None,
-                ooh=None,
-            )
-
-            our_moves.append(move)
-            opp_moves.append("b")  # Defector 总是背叛
-
-        # 转换 axelrod 结果为我方格式
-        # axl_result 是一个列表，每项是 (player1_move, player2_move)
-        axl_moves_tft = [
-            "c" if turn_result[0] == axl.Action.C else "b"
-            for turn_result in axl_result
-        ]
-
-        # 比较
-        self.assertEqual(
-            our_moves, axl_moves_tft,
-            f"Moves mismatch: ours={our_moves}, axelrod={axl_moves_tft}"
-        )
-
-    def test_exclude_cheating_strategies(self):
-        """确保作弊策略被排除。"""
-        all_agents = axelrod_agents()
-
-        # 检查所有策略都不是作弊策略
-        for agent in all_agents:
-            strategy_class = getattr(axl, agent.family, None)
-            if strategy_class is None:
+    def test_deterministic_strategies_match_axelrod(self):
+        """确定性策略：适配器与 axl.Match 逐手一致（含有内部状态的策略）。"""
+        checked = 0
+        for agent in self.agents:
+            cls = self.classes[agent.family]
+            if cls().classifier["stochastic"]:
                 continue
+            game = axl.DefaultGame if agent.params.get("game") == "default" else GAME
+            match = axl.Match([cls(), axl.Cycler(PATTERN)], turns=25, game=game)
+            match.play()
+            ref = to_ours(a for a, _ in match.result)
+            opp = to_ours(b for _, b in match.result)
+            with self.subTest(strategy=agent.family):
+                self.assertEqual(play_against(agent, opp), ref)
+            checked += 1
+        self.assertGreater(checked, 100)
 
-            classifier = strategy_class().classifier
-            self.assertFalse(
-                classifier.get("inspects_source", False),
-                f"{agent.name} inspects source"
-            )
-            self.assertFalse(
-                classifier.get("manipulates_source", False),
-                f"{agent.name} manipulates source"
-            )
-            self.assertFalse(
-                classifier.get("manipulates_state", False),
-                f"{agent.name} manipulates state"
-            )
+    def test_default_game_fallback_only_where_needed(self):
+        fallback = {a.family for a in self.agents if a.params.get("game") == "default"}
+        self.assertIn("ZDExtortion", fallback)
+        self.assertNotIn("TitForTat", fallback)
+        self.assertLess(len(fallback), 20)
 
-    def test_long_run_time_exclusion(self):
-        """默认情况下 long_run_time 策略被排除，显式包含时存在。"""
-        default_agents = axelrod_agents(include_long_run_time=False)
-        with_long = axelrod_agents(include_long_run_time=True)
+    def test_replay_matches_incremental(self):
+        """交错调用多场（触发重放）与逐场调用结果相同。"""
+        opp = "ccbcbbcccb" * 3
+        for name in ("Gradual", "EvolvedFSM16", "OmegaTFT"):
+            (agent,) = axelrod_agents(names=[name])
+            ref = play_against(agent, opp)
+            mine = []
+            for t in range(25):
+                # 每回合之间插入一次对另一场的调用，并故意给出不一致的历史
+                agent.fn(0, t, 1, tuple("b" * t), 2, tuple("c" * t), None, None, None)
+                mine.append(agent.fn(0, t, 1, tuple(mine), 2, tuple(opp[:t]), None, None, None))
+            with self.subTest(strategy=name):
+                self.assertEqual("".join(mine), ref)
 
-        # with_long 应该有更多或相同数量的策略
-        self.assertGreaterEqual(len(with_long), len(default_agents))
+    def test_stochastic_reproducible_under_global_seed(self):
+        stochastic = [a for a in self.agents if self.classes[a.family]().classifier["stochastic"]][:20]
+        opp = "ccbcbbcccb" * 3
+        for agent in stochastic:
+            random.seed(123)
+            first = play_against(agent, opp)
+            random.seed(123)
+            with self.subTest(strategy=agent.family):
+                self.assertEqual(play_against(agent, opp), first)
 
-    def test_history_replay_on_mismatch(self):
-        """当历史不匹配时（如模拟器覆盖动作），策略应正确重放。"""
-        agents = axelrod_agents(names=["TitForTat"])
-        if not agents:
-            self.skipTest("TitForTat not available")
-
-        tft = agents[0]
-
-        # 正常序列：对手合作，TFT 应跟随
-        move1 = tft.fn(0, 0, 1, (), 2, (), None, None, None)
-        self.assertEqual(move1, "c")  # TFT 首手合作
-
-        move2 = tft.fn(0, 1, 1, ("c",), 2, ("c",), None, None, None)
-        self.assertEqual(move2, "c")  # 对手合作，跟随
-
-        # 模拟历史被覆盖：假设第一手实际是背叛（模拟器故障处理）
-        # 现在传入不同的历史
-        move3 = tft.fn(0, 1, 1, ("b",), 2, ("c",), None, None, None)
-        # TFT 应该重放历史并返回"c"（跟随对手上一手的"c"）
-        self.assertEqual(move3, "c")
+    def test_all_agents_run_without_faults(self):
+        """每个策略在我方模拟器中完整打完一届小型锦标赛，没有故障。"""
+        field = [make_agent("tft"), make_agent("all_d"), make_agent("rand", {"p": 0.5})]
+        cfg = TournamentConfig(rounds=2, timeout=None)
+        for agent in self.agents:
+            with self.subTest(strategy=agent.family):
+                result = run_tournament([agent] + field, seed=0, cfg=cfg)
+                self.assertEqual(result.faults[0], 0)
 
 
 if __name__ == "__main__":
