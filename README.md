@@ -22,9 +22,19 @@ docs/
   experiments/   实验日志，一个实验一个文件
   roadmap.md     任务清单、阻塞项、待确认问题
 debug_kit/       学生调试包原样存放（收到后）
+ipd/             代码包：sim（模拟器）、pool（对手池）……
+tests/           单元测试
 ```
 
-代码目录在对应代码落地时再建，规划见 [docs/design/architecture.md](docs/design/architecture.md#代码目录规划)。
+## 常用命令
+
+```bash
+python -m unittest discover -s tests -t .   # 运行测试
+python -m ipd.sim.run                        # 标准对手跑 5 个种子的联赛
+python -m ipd.sim.run --sample 40 --top 15   # 加 40 个随机参数对手
+```
+
+完整代码目录规划见 [docs/design/architecture.md](docs/design/architecture.md#代码目录规划)。
 
 ## 文档索引
 

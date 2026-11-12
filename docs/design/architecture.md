@@ -31,6 +31,7 @@
   - 预测对手下一手（用 19 场预测第 20 场）
   - 对比学习：同一策略的两场嵌入相近
 - 蒸馏：学生自己下棋，教师在学生访问到的状态上给动作分布（DAgger），之后强化学习微调。
+- 进化策略微调：在纯 Python 评测环境中以锦标赛总分为适应度（ADR 0005）。
 
 ## 对手池
 
@@ -41,6 +42,7 @@
 | L2 | 感知回合：最后 k 手背叛、阶段切换、倒推背叛 |
 | L3 | 读历史：基于检测器库（见下）决定防范、报复或剥削 |
 | L4 | 联盟：我方各代快照 + 专门针对我方的克星 |
+| 外部 | 移植 Axelrod 演化策略：EvolvedANN、EvolvedLookerUp、EvolvedFSM、PSO Gambler；EvolvedAttention 仅训练端 |
 
 - 每个家族的参数随机采样，而非只放标准版本。
 - 加噪声版本（1–15% 失误）和"出错退化为 AllC"版本。
@@ -63,14 +65,18 @@
 
 ## 代码目录规划
 
+所有代码放在 `ipd/` 包内（避免顶层 `env/` 与虚拟环境目录重名）。✅ 为已建立。
+
 ```
-env/         规则模拟器（对齐调试包），未知参数做成配置项
-pool/        对手池 L0–L4
-detectors/   检测器库
-agents/      手工基线（参照尺）、强化学习智能体
-training/    训练、蒸馏脚本
-runtime/     纯 Python 推理与权重导出
-eval/        评测：import 白名单、单次最坏耗时、5 种子
-submission/  最终提交文件
-tests/
+ipd/sim/          ✅ 规则模拟器（对齐调试包），未知参数在 TournamentConfig 中
+ipd/pool/         ✅ 对手池（已有 L0–L2）
+ipd/detectors/    检测器库
+ipd/agents/       手工基线（参照尺）、强化学习智能体
+ipd/training/     训练、蒸馏、进化策略微调
+ipd/runtime/      纯 Python 推理与权重导出
+ipd/eval/         评测：import 白名单、单次最坏耗时、5 种子
+submission/       最终提交文件
+tests/            ✅ 单元测试（unittest）
 ```
+
+对手池中的策略与提交物使用同一九参数接口；`Agent.fn` 由模拟器按位置参数调用。

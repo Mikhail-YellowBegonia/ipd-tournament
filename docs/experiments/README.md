@@ -1,12 +1,12 @@
 # 实验日志
 
-一个实验一个文件：`YYYY-MM-DD-short-title.md`。
+一个实验一个文件：`NNNN-short-title.md`，按顺序编号。
 
 模板：
 
 ```
 # 标题
-- 日期：
+- 日期：YYYY-MM-DD
 - 提交（git commit）：
 - 关联决策：ADR NNNN
 
