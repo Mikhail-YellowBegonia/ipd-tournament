@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Callable
 
-from ipd.pool import l0, l1, l2
+from ipd.pool import l0, l1, l2, l3
 from ipd.sim.agent import Agent
 
 
@@ -48,6 +48,14 @@ FAMILIES = [
     Family("faulty", "L2", l2.faulty, lambda rng: {"p": _r(rng.uniform(0.005, 0.05))}, wrapper=True),
     # by_phase 需要三个基础策略，单独处理
     Family("by_phase", "L2", l2.by_phase, wrapper=True),
+    Family("reputation_gate", "L3", l3.reputation_gate,
+           lambda rng: {"threshold": _r(rng.uniform(0.1, 0.4))}, wrapper=True),
+    Family("endgame_preempt", "L3", l3.endgame_preempt,
+           lambda rng: {"margin": rng.randint(0, 2), "min_rate": _r(rng.uniform(0.3, 0.7))}, wrapper=True),
+    Family("exploit_soft", "L3", l3.exploit_soft,
+           lambda rng: {"threshold": _r(rng.uniform(0.1, 0.4))}, wrapper=True),
+    Family("opening_mirror", "L3", l3.opening_mirror,
+           lambda rng: {"threshold": _r(rng.uniform(0.3, 0.7))}, wrapper=True),
 ]
 
 FAMILY_BY_NAME = {f.name: f for f in FAMILIES}
@@ -104,6 +112,10 @@ def canonical():
         make_agent("end_defect", {"k": 3}, [tft]),
         make_agent("opening", {"pattern": "b"}, [make_agent("grim")]),
         make_agent("noisy", {"eps": 0.05}, [tft]),
+        make_agent("reputation_gate", {"threshold": 0.25}, [tft]),
+        make_agent("endgame_preempt", {"margin": 1, "min_rate": 0.5}, [tft]),
+        make_agent("exploit_soft", {"threshold": 0.2}, [tft]),
+        make_agent("opening_mirror", {"threshold": 0.5}, [tft]),
     ]
 
 
@@ -117,6 +129,9 @@ def sample_agent(rng, layer):
     params = fam.sample(rng) if fam.sample else {}
     if fam.name == "by_phase":
         bases = [sample_agent(rng, "L1") for _ in range(3)]
+    elif fam.layer == "L3":
+        # 读历史的策略包在反应式或回合感知策略外，偶尔叠加另一个读历史策略
+        bases = [sample_agent(rng, rng.choice(["L1", "L1", "L2", "L3"]))]
     elif fam.wrapper:
         # 包装器可以叠加：基础策略有一定概率本身也是 L2
         bases = [sample_agent(rng, "L2" if rng.random() < 0.2 else rng.choice(["L0", "L1", "L1"]))]
@@ -125,7 +140,7 @@ def sample_agent(rng, layer):
     return make_agent(fam.name, params, bases)
 
 
-DEFAULT_MIX = {"L0": 0.15, "L1": 0.45, "L2": 0.40}
+DEFAULT_MIX = {"L0": 0.10, "L1": 0.35, "L2": 0.30, "L3": 0.25}
 
 
 def uniquify(agents):

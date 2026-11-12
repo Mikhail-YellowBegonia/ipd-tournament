@@ -51,6 +51,14 @@
 
 ## 检测器库与信誉塑形
 
+实现：`ipd/detectors/profile.py`。`profile(own_rows, opp_rows)` 单次遍历，统计以下事件的
+（命中, 试验）：合作率、首手背叛、末手背叛、终局背叛段（及典型长度）、无端背叛、
+报复、复读（跟随对手上一手）、剥削合作者、冷酷触发。含 `"m"` 的位置不计入试验，
+平滑由调用方用 `Profile.rate(prior, strength)` 决定。`match_profile(my, opp)` 对单场打分，供塑形使用。
+
+L3 包装器（`ipd/pool/l3.py`）：reputation_gate（对坏信誉者全程背叛）、endgame_preempt
+（比对手的终局背叛再提前）、exploit_soft（剥削不报复者）、opening_mirror（对常背叛起手者背叛起手）。
+
 检测器是对一份 20×25 历史打分的函数，例如：终局背叛、最后 N 手背叛、起手背叛、
 复读（TFT 式跟随）、剥削合作者、无端背叛率。同一套检测器有两个用途：
 
@@ -69,8 +77,8 @@
 
 ```
 ipd/sim/          ✅ 规则模拟器（对齐调试包），未知参数在 TournamentConfig 中
-ipd/pool/         ✅ 对手池（已有 L0–L2）
-ipd/detectors/    检测器库
+ipd/pool/         ✅ 对手池（已有 L0–L3）
+ipd/detectors/    ✅ 检测器库
 ipd/agents/       手工基线（参照尺）、强化学习智能体
 ipd/training/     训练、蒸馏、进化策略微调
 ipd/runtime/      纯 Python 推理与权重导出
