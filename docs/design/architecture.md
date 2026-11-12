@@ -43,6 +43,19 @@
 | L3 | 读历史：基于检测器库（见下）决定防范、报复或剥削 |
 | L4 | 联盟：我方各代快照 + 专门针对我方的克星 |
 | 外部 | 移植 Axelrod 演化策略：EvolvedANN、EvolvedLookerUp、EvolvedFSM、PSO Gambler；EvolvedAttention 仅训练端 |
+| AXL | Axelrod 策略库适配器：将 axelrod 包中的策略适配为我方接口（仅训练端） |
+
+### Axelrod 适配器
+
+`ipd/pool/axl.py` 提供 `axelrod_agents()` 函数，将 [Axelrod](https://github.com/Axelrod-Python/Axelrod) 策略库中的策略适配为我方模拟器接口。要点：
+
+- **状态管理**：Axelrod 的 Player 对象有状态，每场对局维护独立实例；历史不匹配时通过重放恢复状态
+- **格式转换**：Axelrod 使用 `'C'/'D'`，我方使用 `'c'/'b'`
+- **收益映射**：Axelrod 的 Game 固定，我方分阶段变化；选用第 0 阶段收益 `(T=4, S=-6, R=2, P=-1)` 作为映射（占比最大且策略初始化时需要）
+- **过滤规则**：排除作弊策略（`inspects_source` / `manipulates_source` / `manipulates_state`）、无法构造或崩溃的策略；`long_run_time` 策略需显式包含
+- **可重现性**：从全局 `random` 模块为每个策略实例设置种子
+
+仅训练端依赖（`requirements-train.txt`），评测端不依赖 axelrod 包。
 
 - 每个家族的参数随机采样，而非只放标准版本。
 - 加噪声版本（1–15% 失误）和"出错退化为 AllC"版本。
