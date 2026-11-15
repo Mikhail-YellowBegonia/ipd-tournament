@@ -22,3 +22,4 @@
 - [0003 教师-学生蒸馏；评测完全对齐考试环境](0003-distillation-and-eval-alignment.md)
 - [0004 信誉成本以闭环为主、塑形项为对冲](0004-reputation-shaping.md)
 - [0005 蒸馏后在评测端用进化策略微调](0005-es-finetune-on-eval-side.md)
+- [0006 分阶段引入对手复杂度，避免过早过拟合](0006-staged-opponent-complexity.md)
