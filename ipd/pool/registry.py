@@ -1,10 +1,12 @@
-"""对手池目录：标准版本与参数随机采样。"""
+"""对手池目录：标准版本、参数随机采样与分阶段训练配置。"""
 
+import random
 from dataclasses import dataclass
 from typing import Callable
 
 from ipd.pool import l0, l1, l2, l3
 from ipd.sim.agent import Agent
+from ipd.sim.config import TournamentConfig
 
 
 @dataclass(frozen=True)
@@ -89,33 +91,71 @@ def make_agent(name, params=None, bases=()):
     return Agent(name=label, fn=fn, family=name, layer=fam.layer, params=record)
 
 
+# 每个族"标准版本"的固定参数；未列出的族无参数。与 Family.sample 的默认取值一致。
+STANDARD_PARAMS = {
+    "rand": {"p": 0.5},
+    "periodic": {"pattern": "cb"},
+    "gtft": {"g": 0.3},
+    # 与 TFT 等价：上一手 (c,c) 继续合作，(d,d) 继续背叛，(d,c) 回到合作
+    "memory_one": {"p_cc": 1, "p_cd": 0, "p_dc": 1, "p_dd": 0, "p0": 1},
+    "joss": {"p": 0.1},
+    "end_defect": {"k": 1},
+    "opening": {"pattern": "b"},
+    "noisy": {"eps": 0.05},
+    "faulty": {"p": 0.02},
+    "reputation_gate": {"threshold": 0.25},
+    "endgame_preempt": {"margin": 1, "min_rate": 0.5},
+    "exploit_soft": {"threshold": 0.2},
+    "opening_mirror": {"threshold": 0.5},
+}
+
+# 包装器族标准版本所包的基础策略（族名）。
+STANDARD_BASES = {
+    "end_defect": ("tft",),
+    "opening": ("grim",),
+    "noisy": ("tft",),
+    "faulty": ("tft",),
+    "by_phase": ("tft", "tf2t", "grim"),
+    "reputation_gate": ("tft",),
+    "endgame_preempt": ("tft",),
+    "exploit_soft": ("tft",),
+    "opening_mirror": ("tft",),
+}
+
+
+def standard_agent(name):
+    """构造某一族的标准版本（固定参数与基础策略）。"""
+    bases = [make_agent(base) for base in STANDARD_BASES.get(name, ())]
+    return make_agent(name, STANDARD_PARAMS.get(name, {}), bases)
+
+
 def canonical():
     """每个族的标准版本，用于快速对照。"""
     tft = make_agent("tft")
     return [
-        make_agent("all_c"),
-        make_agent("all_d"),
-        make_agent("rand", {"p": 0.5}),
-        make_agent("periodic", {"pattern": "cb"}),
+        standard_agent("all_c"),
+        standard_agent("all_d"),
+        standard_agent("rand"),
+        standard_agent("periodic"),
         tft,
-        make_agent("stft"),
-        make_agent("tf2t"),
-        make_agent("gtft", {"g": 0.3}),
-        make_agent("grim"),
-        make_agent("wsls"),
-        make_agent("joss", {"p": 0.1}),
-        make_agent("gradual"),
-        make_agent("prober"),
-        make_agent("soft_majority"),
-        make_agent("hard_majority"),
-        make_agent("end_defect", {"k": 1}, [tft]),
+        standard_agent("stft"),
+        standard_agent("tf2t"),
+        standard_agent("gtft"),
+        standard_agent("grim"),
+        standard_agent("wsls"),
+        standard_agent("joss"),
+        standard_agent("gradual"),
+        standard_agent("prober"),
+        standard_agent("soft_majority"),
+        standard_agent("hard_majority"),
+        standard_agent("end_defect"),
         make_agent("end_defect", {"k": 3}, [tft]),
-        make_agent("opening", {"pattern": "b"}, [make_agent("grim")]),
-        make_agent("noisy", {"eps": 0.05}, [tft]),
-        make_agent("reputation_gate", {"threshold": 0.25}, [tft]),
-        make_agent("endgame_preempt", {"margin": 1, "min_rate": 0.5}, [tft]),
-        make_agent("exploit_soft", {"threshold": 0.2}, [tft]),
-        make_agent("opening_mirror", {"threshold": 0.5}, [tft]),
+        standard_agent("opening"),
+        standard_agent("noisy"),
+        standard_agent("reputation_gate"),
+        standard_agent("endgame_preempt"),
+        standard_agent("exploit_soft"),
+        standard_agent("opening_mirror"),
     ]
 
 
@@ -123,9 +163,8 @@ def _families(layers):
     return [f for f in FAMILIES if f.layer in layers]
 
 
-def sample_agent(rng, layer):
-    """随机采样一个指定层的 Agent，参数随机。"""
-    fam = rng.choice(_families((layer,)))
+def sample_family(rng, fam):
+    """按某个族随机采样一个 Agent：参数与基础策略都随机。"""
     params = fam.sample(rng) if fam.sample else {}
     if fam.name == "by_phase":
         bases = [sample_agent(rng, "L1") for _ in range(3)]
@@ -138,6 +177,11 @@ def sample_agent(rng, layer):
     else:
         bases = []
     return make_agent(fam.name, params, bases)
+
+
+def sample_agent(rng, layer):
+    """随机采样一个指定层的 Agent，参数随机。"""
+    return sample_family(rng, rng.choice(_families((layer,))))
 
 
 DEFAULT_MIX = {"L0": 0.10, "L1": 0.35, "L2": 0.30, "L3": 0.25}
@@ -167,3 +211,75 @@ def sample_population(rng, n, mix=None):
     mix = mix or DEFAULT_MIX
     layers, weights = zip(*mix.items())
     return uniquify([sample_agent(rng, rng.choices(layers, weights)[0]) for _ in range(n)])
+
+
+# ADR 0006 的四个训练阶段各含哪些对手层。
+STAGE_LAYERS = {
+    1: ("L0", "L1"),
+    2: ("L0", "L1", "L2"),
+    3: ("L0", "L1", "L2", "L3"),
+    4: ("L0", "L1", "L2", "L3"),
+}
+
+# 阶段 3–4 引入历史隐藏（概率、粒度见 TournamentConfig）。
+STAGE_HIDE_PROB = {1: 0.0, 2: 0.0, 3: 0.1, 4: 0.1}
+
+# 阶段池中每个可随机族在给定 seed 时额外生成的变体数。
+STAGE_VARIANTS = 2
+
+
+def _randomizable(fam):
+    """该族是否有随机参数或随机基础策略。
+
+    无参数、无包装的族（如 all_c、tft）加变体只会重复标准版本，因此跳过。
+    """
+    return fam.sample is not None or fam.name == "by_phase"
+
+
+def agents_for_stage(stage, seed=None, variants=None):
+    """按 ADR 0006 返回指定训练阶段的对手池。
+
+    每个阶段包含其允许层内**所有族**的标准版本；给定 seed 时，再为每个
+    有随机参数的族生成 `variants`（默认 2）个随机参数变体。
+
+    Args:
+        stage: 训练阶段编号 1–4。阶段 4（自我对弈为主）沿用阶段 3 的对手。
+        seed: 随机参数采样的种子；None 表示只返回标准版本。
+        variants: 每个可随机族生成的变体数；None 用 STAGE_VARIANTS，0 表示不加。
+
+    Returns:
+        Agent 列表，名字唯一。规模（variants=2）：
+        阶段 1 = 16 / 26，阶段 2 = 21 / 41，阶段 3、4 = 25 / 53
+        （斜杠前为 seed=None，斜杠后为给定 seed）。
+
+    Raises:
+        ValueError: stage 不在 1–4。
+    """
+    if stage not in STAGE_LAYERS:
+        raise ValueError(f"Unknown stage: {stage}")
+    variants = STAGE_VARIANTS if variants is None else variants
+    layers = STAGE_LAYERS[stage]
+    families = _families(layers)
+    agents = [standard_agent(fam.name) for fam in families]
+    if seed is not None and variants > 0:
+        rng = random.Random(seed)
+        for fam in families:
+            if _randomizable(fam):
+                agents.extend(sample_family(rng, fam) for _ in range(variants))
+    return uniquify(agents)
+
+
+def config_for_stage(stage):
+    """按 ADR 0006 返回指定训练阶段的 TournamentConfig。
+
+    阶段 1–2 使用完整历史；阶段 3–4 引入整场历史隐藏（hide_prob=0.1）。
+    其余字段保持 TournamentConfig 默认值（待调试包对齐，见 docs/roadmap.md）。
+
+    Raises:
+        ValueError: stage 不在 1–4。
+    """
+    if stage not in STAGE_LAYERS:
+        raise ValueError(f"Unknown stage: {stage}")
+    if stage <= 2:
+        return TournamentConfig(hide_prob=STAGE_HIDE_PROB[stage])
+    return TournamentConfig(hide_prob=STAGE_HIDE_PROB[stage], hide_scope="match")
