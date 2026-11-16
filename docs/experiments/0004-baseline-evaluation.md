@@ -1,6 +1,7 @@
 # 手工基线（概率模型 + DP）评估
 - 日期：2026-11-16
-- 提交（git commit）：`64a7aee` Add handcrafted baseline: opponent model + DP (issue #3)
+- 提交（git commit）：`6e59b8a` Add handcrafted baseline: opponent model + DP (issue #3)
+- 合并：PR #11（rebase merge；分支提交因 rebase 重写为 main 上的 `6e59b8a`）
 - 关联决策：ADR 0001（手工基线仅作参照尺）；对应 issue #3（取代 issue #1）
 
 ## 假设

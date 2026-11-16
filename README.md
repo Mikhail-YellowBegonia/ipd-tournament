@@ -22,7 +22,7 @@ docs/
   experiments/   实验日志，一个实验一个文件
   roadmap.md     任务清单、阻塞项、待确认问题
 debug_kit/       学生调试包原样存放（收到后）
-ipd/             代码包：sim（模拟器）、pool（对手池）……
+ipd/             代码包：sim（模拟器）、pool（对手池）、detectors（检测器）、agents（手工基线）……
 tests/           单元测试
 ```
 
@@ -32,6 +32,7 @@ tests/           单元测试
 python -m unittest discover -s tests -t .   # 运行测试
 python -m ipd.sim.run                        # 标准对手跑 5 个种子的联赛
 python -m ipd.sim.run --sample 40 --top 15   # 加 40 个随机参数对手
+python -m ipd.agents.eval_baseline           # 手工基线在 --sample 80 池子里的排名/每场均分/耗时（实验 0004）
 
 # 训练端环境（axelrod 适配器等）
 uv venv .venv && uv pip install --python .venv -r requirements-train.txt
