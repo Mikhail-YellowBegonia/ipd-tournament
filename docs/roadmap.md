@@ -12,7 +12,8 @@
 | 2b | 移植 Axelrod 演化策略（EvolvedANN 等） | ✅ | 由 2a 适配器覆盖（训练端），无需纯 Python 移植 |
 | 3 | 检测器库 | ✅ | `ipd/detectors`；单次遍历，完整历史约 0.12 ms |
 | 4 | 对手池 L3 | ✅ | `ipd/pool/l3.py`；4 个读历史包装器族 |
-| 5 | 手工基线（参照尺） | ⬜ | issue #1；对手建模 + 动态规划最优应对 |
+| 4b | 对手池阶段配置 | ✅ | issue #4；`agents_for_stage`/`config_for_stage`（ADR 0006） |
+| 5 | 手工基线（参照尺） | ✅ | issue #3（取代 #1）；`ipd/agents/baseline.py`；实验 0004 |
 | 6 | 行为指纹与去重、多配比评估协议 | ⬜ | issue #2|
 | 7 | 历史编码器 + 辅助损失训练代码 | ⬜ | |
 | 8 | 强化学习训练循环（教师） | ⬜ | |

@@ -90,7 +90,7 @@ L3 包装器（`ipd/pool/l3.py`）：reputation_gate（对坏信誉者全程背�
 ipd/sim/          ✅ 规则模拟器（对齐调试包），未知参数在 TournamentConfig 中
 ipd/pool/         ✅ 对手池（已有 L0–L3）
 ipd/detectors/    ✅ 检测器库
-ipd/agents/       手工基线（参照尺）、强化学习智能体
+ipd/agents/       ✅ 手工基线（参照尺）；后续强化学习智能体
 ipd/training/     训练、蒸馏、进化策略微调
 ipd/runtime/      纯 Python 推理与权重导出
 ipd/eval/         评测：import 白名单、单次最坏耗时、5 种子
