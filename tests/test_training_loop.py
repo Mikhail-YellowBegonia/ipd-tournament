@@ -267,8 +267,20 @@ class ScheduleTest(unittest.TestCase):
         self.assertTrue(result.passed)
         failed = acceptance_report(1, {**metrics, "policy_per_match": 40.0})
         self.assertFalse(failed.passed)
+        # 阶段 1 容差：均值可低于基线 3 分、逐项 gap 可到 15 分。
+        within = acceptance_report(
+            1,
+            {
+                **metrics,
+                "policy_per_match": 45.0,
+                "baseline_per_match": 47.0,
+                "regret": {name: 14.0 for name in CANONICAL_OPPONENTS},
+            },
+        )
+        self.assertTrue(within.passed)
+        self.assertTrue(any("容差" in note for note in within.notes))
         worse = acceptance_report(
-            1, {**metrics, "regret": {name: 1.0 for name in CANONICAL_OPPONENTS}}
+            1, {**metrics, "regret": {name: 16.0 for name in CANONICAL_OPPONENTS}}
         )
         self.assertFalse(worse.passed)
 
@@ -289,6 +301,14 @@ class ScheduleTest(unittest.TestCase):
             "regret": {name: 2.0 for name in CANONICAL_OPPONENTS},
         }
         self.assertFalse(acceptance_report(2, worse, previous=previous).passed)
+        absolute = acceptance_report(
+            2,
+            {
+                **metrics,
+                "regret": {name: 9.0 for name in CANONICAL_OPPONENTS},
+            },
+        )
+        self.assertFalse(absolute.passed)
 
     def test_gate_stage3_hide_robustness(self):
         metrics = {
@@ -302,6 +322,22 @@ class ScheduleTest(unittest.TestCase):
         )
         failed = acceptance_report(3, {**metrics, "hide_drop_ratio": 0.5})
         self.assertFalse(failed.passed)
+        canonical = acceptance_report(
+            3, {**metrics, "regret": {name: 6.0 for name in CANONICAL_OPPONENTS}}
+        )
+        self.assertFalse(canonical.passed)
+
+    def test_gate_stage4_convergence(self):
+        metrics = {
+            "policy_per_match": 50.0,
+            "baseline_per_match": 45.0,
+            "regret": {name: 0.0 for name in CANONICAL_OPPONENTS},
+            "converged": True,
+        }
+        self.assertTrue(acceptance_report(4, metrics).passed)
+        self.assertFalse(
+            acceptance_report(4, {**metrics, "converged": False}).passed
+        )
 
     def test_gate_requires_scores(self):
         with self.assertRaises(ValueError):
