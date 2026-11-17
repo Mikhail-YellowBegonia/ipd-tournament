@@ -36,7 +36,7 @@
 
 | # | 任务 | 状态 | 备注 |
 |---|---|---|---|
-| T1 | 反试探守卫 `baseline_guard` | 🟡 | ADR 0009；对手首手 B → 我第 2 手 B；全池 5 seeds 效应 +1.30 |
+| T1 | 反试探守卫 `baseline_guard` | 🟡 | ADR 0009；已实现并验证：全池 5 seeds 效应 +1.30（worst -0.55）、标准池 +8.61；待 dev pool 复核（实验 0009） |
 | T2 | 全池诊断/评测 harness | ⬜ | `ipd/eval/diagnose.py`；全池 130 × 5 seeds + 克隆对照 |
 | T3 | dev pool（60 个） | ⬜ | 冻结 130 为最终测试；迭代只在 dev + 标准池 |
 | T4 | 尾部规则（history_classifier/endgame_preempt/…） | ⬜ | 每条过四道门：全池 mean/worst、标准池、config 变体 |
