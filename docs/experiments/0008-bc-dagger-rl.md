@@ -172,3 +172,13 @@ print(evaluate_policy(policy, agents_for_stage(1, seed=0), config_for_stage(1),
                       seeds=(0,1,2,3,4), baseline=baseline_agent()))
 PY
 ```
+
+
+## 2026-11-17 验收口径修订与暂停
+
+- ADR 0007 将阶段 1 从“均值 > 基线且逐项 regret ≤0”改为阶梯口径：
+  均值容差 3.0 分/场、canonical 逐项 gap ≤15；阶段 2/3 收紧到 1/8 和 0/5。
+- 当前最佳单模型 5 种子 45.38 vs 47.79，all_c 8.2、all_d 14.5、tft 7.0、
+  gradual 2.2，按修订口径**通过阶段 1**；逐项仍未不低于基线，记录保留。
+- 训练暂停，保留基线兜底（留出池 47.94）；PR #16 保留未合并。
+- 恢复顺序：单模型蒸馏/条件化权重 → 阶段 2/3 信誉训练 → 必要时 PPO/ES。
