@@ -1,7 +1,7 @@
 # 留出测试池：130 个独立编写策略与基线参照
 
 - 日期：2026-11-17
-- 提交（git commit）：`4ecad7d`（PR #15；rebase 合并后哈希可能变化）
+- 提交（git commit）：`50fca0d`（PR #15，rebase 合并）
 - 关联决策：ADR 0001（基线是参照尺）、ADR 0003（评测对齐）、ADR 0006（分阶段）
 - 对应 issue：#10（路线图任务 11）
 - 代码：`ipd/pool/holdout/`、`ipd/agents/holdout_template.py`、
