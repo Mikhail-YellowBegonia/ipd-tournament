@@ -14,8 +14,18 @@
 
 关于 issue 中的 "regret"：这里操作化为**相对基线的分差**
 `regret(opponent) = baseline 对它的每场平均分 − 策略对它的每场平均分`。
-正值表示策略在该对手上不如基线；阶段 1 要求四个 canonical 对手的 regret ≤ 0，
-即逐对手也不低于基线。基线是 issue #3 的参照尺（ADR 0001）。
+正值表示策略在该对手上不如基线。基线是 issue #3 的参照尺（ADR 0001）。
+
+阶段 1 的验收口径在 2026-11-17 做了**阶梯式放宽**（ADR 0007 修订）：
+基线对 TFT 已到理论上限 72、对 AllC 是 118/120，要求学习策略在阶段 1
+逐项 ≥ 基线几乎不可达；阶段 1 改为"防退化/诊断"关口，阶段 2/3 再收紧：
+
+| 阶段 | 均值容差（可低于基线） | canonical 逐项 gap 上限 | 其他 |
+|---|---:|---:|---|
+| 1 | 3.0 | 15.0 | 记录 gap，不作为硬 ≤0 |
+| 2 | 1.0 | 8.0 | 相对阶段 1 回退 ≤1.0 |
+| 3 | 0（必须 > 基线） | 5.0 | hide 掉分 ≤15% |
+| 4 | 0（必须 > 基线） | 5.0 | 自我对弈收敛 |
 """
 
 from dataclasses import dataclass
@@ -51,9 +61,12 @@ class StageSpec:
     self_play: bool = False
     # 阶段 3 的 hide_prob 鲁棒性门槛：隐藏历史导致的每场分数下降比例上限。
     hide_drop_limit: float = 0.15
-    # 阶段 2 允许的均值容差与 regret 回退容差（相对阶段 1）。
+    # 均值容差：策略允许低于基线的每场分数（阶段 1/2 阶梯放宽）。
     mean_tolerance: float = 0.5
-    regret_tolerance: float = 0.5
+    # canonical 逐项 gap 的上限（阶段 1 宽、阶段 3 收紧）。
+    canonical_tolerance: float = 0.0
+    # 阶段 2 相对阶段 1 的 regret 回退容差。
+    regret_tolerance: float = 1.0
 
 
 STAGE_SPECS = {
@@ -65,6 +78,8 @@ STAGE_SPECS = {
         iterations=80,
         eval_every=20,
         description=STAGE_DESCRIPTIONS[1],
+        mean_tolerance=3.0,
+        canonical_tolerance=15.0,
     ),
     2: StageSpec(
         stage=2,
@@ -74,6 +89,9 @@ STAGE_SPECS = {
         iterations=80,
         eval_every=20,
         description=STAGE_DESCRIPTIONS[2],
+        mean_tolerance=1.0,
+        canonical_tolerance=8.0,
+        regret_tolerance=1.0,
     ),
     3: StageSpec(
         stage=3,
@@ -83,6 +101,7 @@ STAGE_SPECS = {
         iterations=120,
         eval_every=20,
         description=STAGE_DESCRIPTIONS[3],
+        canonical_tolerance=5.0,
     ),
     4: StageSpec(
         stage=4,
@@ -93,6 +112,7 @@ STAGE_SPECS = {
         eval_every=25,
         description=STAGE_DESCRIPTIONS[4],
         self_play=True,
+        canonical_tolerance=5.0,
     ),
 }
 
@@ -192,19 +212,34 @@ def acceptance_report(stage, metrics, previous=None):
         notes.append(f"缺少 canonical 对手: {', '.join(missing)}")
 
     if stage == 1:
-        if not policy_score > baseline_score:
+        if policy_score < baseline_score - spec.mean_tolerance:
             reasons.append(
-                f"阶段 1 平均分未超过基线: {policy_score:.2f} <= {baseline_score:.2f}"
+                f"阶段 1 平均分低于基线超过 {spec.mean_tolerance}: "
+                f"{policy_score:.2f} vs {baseline_score:.2f}"
             )
         for name, value in regrets.items():
-            if value > 0:
-                reasons.append(f"对 {name} 的 regret={value:.2f} > 0")
+            if value > spec.canonical_tolerance:
+                reasons.append(
+                    f"对 {name} 的 regret={value:.2f} > "
+                    f"{spec.canonical_tolerance:.1f}"
+                )
+            elif value > 0:
+                notes.append(
+                    f"对 {name} 的 regret={value:.2f} 在阶段 1 容差 "
+                    f"{spec.canonical_tolerance:.1f} 内"
+                )
     elif stage == 2:
         if policy_score < baseline_score - spec.mean_tolerance:
             reasons.append(
                 f"阶段 2 平均分低于基线超过 {spec.mean_tolerance}: "
                 f"{policy_score:.2f} vs {baseline_score:.2f}"
             )
+        for name, value in regrets.items():
+            if value > spec.canonical_tolerance:
+                reasons.append(
+                    f"阶段 2 对 {name} 的 regret={value:.2f} > "
+                    f"{spec.canonical_tolerance:.1f}"
+                )
         if previous is not None:
             previous_regrets, _ = _canonical_regrets(previous)
             for name, value in regrets.items():
@@ -220,6 +255,12 @@ def acceptance_report(stage, metrics, previous=None):
             reasons.append(
                 f"阶段 3 平均分未超过基线: {policy_score:.2f} <= {baseline_score:.2f}"
             )
+        for name, value in regrets.items():
+            if value > spec.canonical_tolerance:
+                reasons.append(
+                    f"阶段 3 对 {name} 的 regret={value:.2f} > "
+                    f"{spec.canonical_tolerance:.1f}"
+                )
         ratio = metrics.get("hide_drop_ratio")
         if ratio is None:
             notes.append("未测量 hide_prob 鲁棒性（hide_drop_ratio）")
@@ -231,6 +272,12 @@ def acceptance_report(stage, metrics, previous=None):
         if not metrics.get("learned_reputation", True):
             notes.append("未验证是否学到防范读历史对手（需行为差异检查）")
     else:
+        for name, value in regrets.items():
+            if value > spec.canonical_tolerance:
+                reasons.append(
+                    f"阶段 4 对 {name} 的 regret={value:.2f} > "
+                    f"{spec.canonical_tolerance:.1f}"
+                )
         if not metrics.get("converged", False):
             reasons.append("阶段 4 种群自我对弈尚未收敛")
         if "hide_drop_ratio" not in metrics:
