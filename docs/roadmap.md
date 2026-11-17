@@ -36,13 +36,14 @@
 
 | # | 任务 | 状态 | 备注 |
 |---|---|---|---|
-| T1 | 反试探守卫 `baseline_guard` | 🟡 | ADR 0009；已实现并验证：全池 5 seeds 效应 +1.30（worst -0.55）、标准池 +8.61；待 dev pool 复核（实验 0009） |
+| T1 | 反试探守卫 `baseline_guard` | 🟡 | ADR 0009/0010；holdout +1.30，dev -0.62；硬补丁，拒绝作为提交候选；保留消融（实验 0009/0011） |
 | T2 | 全池诊断/评测 harness | ✅ | `ipd/eval/diagnose.py`；全池/克隆/逐对手/tag/尾部/gate；实验 0010 |
-| T3 | dev pool（60 个） | ⬜ | 冻结 130 为最终测试；迭代只在 dev + 标准池 |
-| T4 | 尾部规则（history_classifier/endgame_preempt/…） | ⬜ | 每条过四道门：全池 mean/worst、标准池、config 变体 |
-| T5 | 分类器/q 模型（残差） | ⬜ | detector 特征 + logistic/GBDT → q → DP；置信度门控 |
+| T3 | dev pool（60 个） | ✅ | 6 模块 × 10、0 故障、16 项测试；`--pool dev` 已接入（实验 0011） |
+| T4 | 通用对手模型 v0（特征 q + DP） | ⬜ | detector + 本场 + 历史-本场不一致 → q → DP；dev + 130 双边门槛（ADR 0010） |
+| T5 | 类型后验 / 决策聚焦 q（v1） | ⬜ | T4 稳定后再做；非主线 |
 | T6 | 独立提交版合并 | ⬜ | 零 import、parity、p99 < 5 ms |
 
+> 反模式：不做针对具体对手/单一线索的硬补丁；guard 是教训（130 +1.30，dev -0.62）。见 ADR 0010。
 > 详细工作项、门槛、时间表见 [plan 0001](plans/0001-tail-first.md)。
 
 ## 受调试包阻塞

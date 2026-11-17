@@ -26,3 +26,4 @@
 - [0007 强化学习训练循环：REINFORCE + 价值基线 + 分阶段环境](0007-rl-training-loop.md)
 - 0008 BC/DAgger 热启动：在 PR #16 分支，尚未合并（不占 main 编号）。
 - [0009 尾部优先：规则层先于学习模型](0009-tail-first-rule-layer.md)
+- [0010 对手建模优先于对手补丁](0010-opponent-model-over-patches.md)

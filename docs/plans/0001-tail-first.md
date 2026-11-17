@@ -23,7 +23,8 @@
 | 最差对手 | prober -138.75 分/场 | 2026-11-17 诊断 |
 
 关键诊断：prober 用 B-C-C 试探，基线把它的跨场"好人历史"当真，本场全程
-合作；`guard_open`（对手首手 B → 我第 2 手 B）可破，全池 5 seeds 效应 +1.30。
+合作；`guard_open`（对手首手 B → 我第 2 手 B）在 130 上 +1.30，但 dev 上
+-0.62——它是硬补丁，不是通用机制（ADR 0010）。
 
 ## 评测协议（决策用）
 
@@ -37,19 +38,22 @@
    `hide_scope="step"`、`shuffle_schedule=False`、`hide_prob=0.0`）各跑一次，
    不允许崩或大幅回退。
 5. **数据纪律**：130 冻结；迭代用 dev pool（60 个，独立编写）与标准池。
-6. **合规**：零 import（提交版）、无模块级可变状态、不改输入、异常返回
+6. **双边门槛**：任何改动必须在 dev + 130 上都不降，且效应 > 克隆噪声；
+   只在一边有效视为池特例，回退。
+7. **合规**：零 import（提交版）、无模块级可变状态、不改输入、异常返回
    `"c"`、Python 3.10–3.12、确定性、0 故障。
 
 ## 工作项
 
-### T1 反试探守卫 `baseline_guard`（今天）
+### T1 反试探守卫 `baseline_guard`（holdout 通过；dev 未通过；不作为提交候选）
 
 - `ipd/agents/baseline_guard.py`：baseline + "对手首手 B → 我第 2 手 B"。
 - 单测：触发/不触发、九参数透传、异常→合作、不改输入、无状态。
 - 验证：全池 5 seeds + 标准池 + 4 种 config 变体。
-- 验收：全池 mean >= 基线 +1.0（5 seeds 均值）；worst >= 基线 -1.0；
-  标准池不降；config 变体不崩。
-- 备注：这是在 130 上发现的规则，需在 dev pool 上复核，避免测试集过拟合。
+- holdout：全池 +1.30（worst -0.55），标准池 +8.61，gate PASS（实验 0009）。
+- **dev：gap -0.62（worst -2.61），未复现（实验 0011）。**
+- 结论：单一线索硬补丁，拒绝作为提交候选；保留为消融/机制证据；
+  洞察（首手模式、历史-本场不一致）转入 T4 特征。见 ADR 0010。
 
 ### T2 全池诊断/评测 harness（✅ 2026-11-17）
 
@@ -58,37 +62,43 @@
 - 验收（实验 0010）：
   - 全池 solo 48.36，与实验 0009 一致；
   - 30/种子协议与 `ipd.eval.holdout` 的 candidate/baseline/gap/faults 完全一致；
-  - 全池 5 seeds guard 复现 +1.30（worst -0.55，noise -0.18），`--gate` PASS。
+  - 全池 5 seeds guard 复现 +1.30（worst -0.55，noise -0.18），`--gate` PASS
+    （仅验证 harness 复现；guard 本身已被 ADR 0010 降级）。
 
-### T3 dev pool（60 个，今明）
+### T3 dev pool（60 个，✅ 2026-11-17）
 
-- 按实验 0007 的独立编写流程生成 60 个策略；标签覆盖沿用 issue #10 下限。
-- 130 留出池从此只做最终测试；dev pool 用于规则/分类器迭代。
-- 验收：0 故障、无 `ipd` 导入、标签探针通过。
+- 6 个隔离作者 × 10 个策略 = 60；`dv_` 前缀；标签覆盖 history 18、
+  conditional 38、endgame 15、noisy 15（下限 12/18/6/6）。
+- `tests/test_dev_pool.py` 16 项、全量 234 项通过；0 故障；与
+  `agents_for_stage()` 无交集；`--pool dev` 已接入。
+- 首个用途：guard 在 dev 上 -0.62，未通过泛化（实验 0011）——这正是
+  dev 池要抓的 holdout 特例。
 
-### T4 尾部规则（本周）
+### T4 通用对手模型 v0：特征 q + DP（本周）
 
-按 2026-11-17 诊断的负分对手逐个修，每条独立提交：
+**不做针对具体对手的硬补丁**（ADR 0010）。尾部清单只作为"缺什么特征"
+的诊断，不逐条加 `if`。
 
-| 目标 | 机制 | 候选修法 |
-|---|---|---|
-| `history_classifier` -56.8 | 读我方历史，判定"软手"后榨取 | 本场证据主导 + 门槛（当前背叛率高且历史合作率高才转惩罚） |
-| `history_endgame_preempt` -50.0 | 读我方历史终局背叛率 >0.4 就开局背叛 | 信誉管理：前 7 轮末手合作，最后 1 轮再背叛 |
-| `fame_executioner` / `headtail_split` -46/-38 | 历史声誉 / 首尾分割 | 同上 + 首手响应 |
-| `warmup3_defect` -32 | 前 3 手合作后永久背叛 | 检测"合作→背叛"切换，提前防守 |
-| `rand_p10` / `hard_majority` -32/-50 | 可剥削 / 硬多数 | q 阈值 / 剥削规则 |
-| `all_d` -45 | 理论下限 | 不修 |
+- 特征：
+  - `ipd/detectors/profile.py` 的 9 类统计（coop/opening/last/endgame/
+    unprovoked/retaliate/copy/exploit/grim/endgame_k）；
+  - 本场：合作率、连续背叛长度、上一手、`length`/阶段、比分差；
+  - 历史-本场不一致：历史合作率 − 本场合作率；对手对他人 vs 对我的差异；
+  - 首手模式（用于区分 prober B-C-C / probe B-B，但不直接决定动作）。
+- 模型：多项 logistic 或浅 GBDT → q（或类型后验 → q）；接回 baseline 的 DP。
+- 训练：pool L0–L3 + Axelrod + 合成；不用 dev/130 训练；dev 做模型选择，
+  130 只做最终。
+- 指标：DP 的 payoff loss / 锦标赛分数，不是分类准确率；置信度门控回退
+  Beta q。
+- 双边门槛：dev 与 130 都不降、效应 > 克隆噪声、0 故障、纯标准库。
+- 失败回退：v0 在双边都拿不到正收益 → 提交基线。
 
-每条规则的"四道门"：全池 mean 不降、worst 不降、标准池不降、4 种 config
-不崩。任何一条不过就回退。
+### T5 类型后验 / 决策聚焦 q（v1，可选）
 
-### T5 分类器/q 模型（残差，下周）
-
-- 特征：`ipd/detectors/profile.py` 的 9 类统计 + 首手/终局/切换等交互特征。
-- 模型：多项 logistic 或小 GBDT -> P(type) 或直接 q；接回原 DP。
-- 训练：pool L0–L3 + Axelrod + 合成，不用 130；dev pool 验证；130 最终。
-- 指标：DP 的 payoff loss，不是分类准确率；置信度门控回退 Beta q。
-- 验收：在 dev pool 上超过规则层，且 130 全池 >= 规则层 -0.5 才考虑合并。
+- 在 T4 之上，把 q 升级为"类型后验 + 条件转移"或"决策聚焦损失"
+  （predict-then-optimize），而不是按对手名写分支。
+- 训练/验证协议同 T4；只有 v0 在双边稳定后才做。
+- 这是上限探针，不是主线；不达标就停在 v0 或基线。
 
 ### T6 独立提交版（下周）
 
@@ -96,20 +106,28 @@
 - parity：与仓库版 10k 随机状态逐动作一致；跨 Python 3.10–3.12。
 - 调试包到手后：`validate_submission.py`、`run_local.py --league`。
 
+## 反模式（明确不做）
+
+- 针对具体对手名/单一线索的硬补丁（guard 是教训：130 +1.30，dev -0.62）。
+- 按测试集尾部逐个加 `if`；尾部清单只用来选特征。
+- 只在 130 上有效、dev 上无效的改动。
+- 用 130 调参（130 只做最终 go/no-go）。
+
 ## 时间表（27 天）
 
 | 天 | 工作 |
 |---|---|
-| D1 | T1 `baseline_guard` + T2 harness + 文档/ADR |
-| D2–4 | T3 dev pool；T4 前 2–3 条规则 |
-| D5–7 | T4 剩余规则；T6 提交版同步 |
-| D8–14 | T5 分类器/q 第一版；规则层 + q 融合；ES 调参；全池 5 seeds 决策 |
-| D15–21 | 收敛单文件、parity、跨版本、合规；必要时恢复 RL 对照 |
+| D1 | T1 guard（holdout 通过/dev 未通过，降级）+ T2 harness + 文档/ADR |
+| D2–4 | T3 dev pool（✅）+ T4 特征/训练数据 |
+| D5–7 | T4 logistic v0 + dev 验证 |
+| D8–14 | T4 GBDT/类型后验 v1；dev + 130 双边验证；T6 提交版 |
+| D15–21 | 收敛单文件、parity、跨版本、合规；必要时回到基线 |
 | D22–27 | 缓冲、调试包验证、最终提交与 300 字说明 |
 
 ## 风险与回退
 
 - **测试集过拟合**：130 只用于最终；dev pool + config 变体缓解。
+- **硬补丁回归**：只在一边有效的改动视为池特例，回退（guard 教训）。
 - **规则交互**：每条规则单独提交；合并后重跑四道门。
 - **赛程假设**：`history_update`/`hide_scope`/`shuffle_schedule` 未确认；
   config 变体是代理。调试包到位后重跑。
@@ -119,5 +137,7 @@
 ## 关联文档
 
 - [ADR 0009：尾部优先](../decisions/0009-tail-first-rule-layer.md)
+- [ADR 0010：对手建模优先于对手补丁](../decisions/0010-opponent-model-over-patches.md)
 - [实验 0009：反试探守卫](../experiments/0009-tail-first-guard.md)
+- [实验 0011：dev 池与 guard 硬补丁检验](../experiments/0011-dev-pool-guard-generalization.md)
 - [路线图](../roadmap.md)
