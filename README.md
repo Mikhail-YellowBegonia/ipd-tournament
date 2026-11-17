@@ -33,6 +33,7 @@ python -m unittest discover -s tests -t .   # 运行测试
 python -m ipd.sim.run                        # 标准对手跑 5 个种子的联赛
 python -m ipd.sim.run --sample 40 --top 15   # 加 40 个随机参数对手
 python -m ipd.agents.eval_baseline           # 手工基线在 --sample 80 池子里的排名/每场均分/耗时（实验 0004）
+python -m ipd.eval.protocol --agent tft gradual "end_defect(k=1)[tft]"  # 指纹去重 + 多配比评估（实验 0005）
 
 # 训练端环境（axelrod 适配器等）
 uv venv .venv && uv pip install --python .venv -r requirements-train.txt

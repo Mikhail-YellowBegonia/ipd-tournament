@@ -5,6 +5,7 @@ import unittest
 
 from ipd.pool import (
     STAGE_LAYERS,
+    agents_by_layer,
     agents_for_stage,
     canonical,
     config_for_stage,
@@ -90,6 +91,29 @@ class LayerTest(unittest.TestCase):
             with self.subTest(family=fam.name):
                 self.assertEqual(agent.family, fam.name)
                 self.assertEqual(agent.layer, fam.layer)
+
+
+class LayerHelperTest(unittest.TestCase):
+    def test_agents_by_layer_only_contains_that_layer(self):
+        for layer in ("L0", "L1", "L2", "L3"):
+            agents = agents_by_layer(layer, seed=0)
+            with self.subTest(layer=layer):
+                self.assertTrue(agents)
+                self.assertEqual({agent.layer for agent in agents}, {layer})
+                self.assertEqual(len({agent.name for agent in agents}), len(agents))
+
+    def test_agents_by_layer_variants_zero_is_standard(self):
+        for layer in ("L0", "L1", "L2", "L3"):
+            families = {f.name for f in FAMILIES if f.layer == layer}
+            with self.subTest(layer=layer):
+                self.assertEqual(
+                    {agent.family for agent in agents_by_layer(layer, variants=0)},
+                    families,
+                )
+
+    def test_agents_by_layer_unknown_layer(self):
+        with self.assertRaises(ValueError):
+            agents_by_layer("L9")
 
 
 class UniquenessTest(unittest.TestCase):

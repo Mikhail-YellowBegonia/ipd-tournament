@@ -184,6 +184,35 @@ def sample_agent(rng, layer):
     return sample_family(rng, rng.choice(_families((layer,))))
 
 
+def agents_by_layer(layer, seed=None, variants=None):
+    """返回指定层内所有族的标准版本；给定 seed 时再加入随机参数变体。
+
+    与 `agents_for_stage` 使用同一套族与变体规则，供评估协议按层取池。
+
+    Args:
+        layer: "L0"–"L3"。
+        seed: 随机参数采样的种子；None 表示只返回标准版本。
+        variants: 每个可随机族生成的变体数；None 用 STAGE_VARIANTS，0 表示不加。
+
+    Returns:
+        Agent 列表，名字唯一。
+
+    Raises:
+        ValueError: layer 不存在。
+    """
+    families = _families((layer,))
+    if not families:
+        raise ValueError(f"Unknown layer: {layer}")
+    variants = STAGE_VARIANTS if variants is None else variants
+    agents = [standard_agent(fam.name) for fam in families]
+    if seed is not None and variants > 0:
+        rng = random.Random(seed)
+        for fam in families:
+            if _randomizable(fam):
+                agents.extend(sample_family(rng, fam) for _ in range(variants))
+    return uniquify(agents)
+
+
 DEFAULT_MIX = {"L0": 0.10, "L1": 0.35, "L2": 0.30, "L3": 0.25}
 
 
