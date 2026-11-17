@@ -50,7 +50,7 @@ class _Player:
         self.faults = 0
 
 
-def _history_view(records, cfg, rng):
+def history_view(records, cfg, rng):
     """把记录转成考试接口的两份 20 × 25 元组，按配置补位与隐藏。"""
     pad = cfg.history_matches - len(records)
     own_rows = [rules.MISSING_ROW] * pad
@@ -89,8 +89,8 @@ def _decide(player, cfg, args):
 def play_match(pa, pb, rs, cfg, rng):
     """进行一场 25 回合对局，返回双方动作序列与得分。不写入历史。"""
     # 历史视图在开场时生成一次，整场不变
-    hist_b_own, hist_b_opp = _history_view(pb.history, cfg, rng)
-    hist_a_own, hist_a_opp = _history_view(pa.history, cfg, rng)
+    hist_b_own, hist_b_opp = history_view(pb.history, cfg, rng)
+    hist_a_own, hist_a_opp = history_view(pa.history, cfg, rng)
     moves_a, moves_b = [], []
     score_a = score_b = 0
     for length in range(rules.TURNS):
