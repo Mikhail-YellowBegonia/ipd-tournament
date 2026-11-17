@@ -51,12 +51,14 @@
   标准池不降；config 变体不崩。
 - 备注：这是在 130 上发现的规则，需在 dev pool 上复核，避免测试集过拟合。
 
-### T2 全池诊断/评测 harness（今明）
+### T2 全池诊断/评测 harness（✅ 2026-11-17）
 
-- `ipd/eval/diagnose.py`：候选 vs 基线 vs 克隆的逐对手、尾部、tag 聚合；
-  固定上面协议；输出 JSON + 表格。
-- 验收：一条命令产出实验 0007 口径 + 全池口径；与现有 `ipd.eval.holdout`
-  数字对得上。
+- `ipd/eval/diagnose.py`：候选 vs 基线 vs 克隆的逐对手、尾部、tag 聚合、
+  config 变体、`--gate`；输出 JSON + 表格。
+- 验收（实验 0010）：
+  - 全池 solo 48.36，与实验 0009 一致；
+  - 30/种子协议与 `ipd.eval.holdout` 的 candidate/baseline/gap/faults 完全一致；
+  - 全池 5 seeds guard 复现 +1.30（worst -0.55，noise -0.18），`--gate` PASS。
 
 ### T3 dev pool（60 个，今明）
 
