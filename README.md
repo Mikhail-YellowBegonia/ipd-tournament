@@ -38,6 +38,7 @@ python -m ipd.agents.eval_baseline           # 手工基线在 --sample 80 池�
 python -m ipd.eval.protocol --agent tft gradual "end_defect(k=1)[tft]"  # 指纹去重 + 多配比评估（实验 0005）
 python -m ipd.eval.diagnose --agent ipd.agents.baseline_guard:baseline_guard_agent  # 全池 5 seeds + 克隆对照（决策用）
 python -m ipd.eval.diagnose --agent tft --size 30 --seeds 0,1,2,3,4 --no-clone      # 与 holdout 同口径（筛查）
+python -m ipd.eval.diagnose --agent ipd.agents.baseline_guard:baseline_guard_agent --pool dev  # dev 池（60 个，迭代用）
 
 # 训练端环境（axelrod 适配器等）
 uv venv .venv && uv pip install --python .venv -r requirements-train.txt
@@ -64,3 +65,4 @@ uv venv .venv && uv pip install --python .venv -r requirements-train.txt
 | [docs/decisions/](docs/decisions/) | 已做出的关键决策及理由 |
 | [docs/experiments/](docs/experiments/) | 实验记录 |
 | [docs/eval/holdout_pool_guidelines.md](docs/eval/holdout_pool_guidelines.md) | 留出测试池编写指南（issue #10） |
+| [docs/eval/dev_pool_guidelines.md](docs/eval/dev_pool_guidelines.md) | Dev 测试池编写指南（T3） |

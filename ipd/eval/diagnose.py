@@ -19,6 +19,9 @@
     python -m ipd.eval.diagnose --agent ipd.agents.baseline:baseline_agent \
         --no-baseline --no-clone --seeds 0
 
+    # dev 池（60 个）：规则/模型迭代用；130 留出池只做最终测试
+    python -m ipd.eval.diagnose --agent ... --pool dev --seeds 0,1,2,3,4
+
     # 四种 config 变体（默认 seed 0）
     python -m ipd.eval.diagnose --agent ... --variants
 
@@ -41,7 +44,7 @@ from ipd.sim import Agent, TournamentConfig, run_tournament
 DEFAULT_BASELINE = "ipd.agents.baseline:baseline_agent"
 DEFAULT_SEEDS = "0,1,2,3,4"
 DEFAULT_TAIL = 10
-POOL_CHOICES = ("holdout", "canonical")
+POOL_CHOICES = ("holdout", "dev", "canonical")
 
 # plan 0001 的四道门之一：配置变体各跑一次（默认 seed 0）。
 CONFIG_VARIANTS = (
@@ -73,6 +76,19 @@ def _sample(pool, seed, size, pool_name):
     rng = random.Random(f"diagnose-{seed}-{size}")
     indices = sorted(rng.sample(range(len(pool)), size))
     return [pool[index] for index in indices]
+
+
+def _pool_agents(pool_name):
+    """按名字取对手池；dev 池延迟导入，避免模块未生成时影响 import。"""
+    if pool_name == "holdout":
+        return list(HOLDOUT_AGENTS)
+    if pool_name == "dev":
+        from ipd.pool.dev import DEV_AGENTS
+
+        return list(DEV_AGENTS)
+    if pool_name == "canonical":
+        return canonical()
+    raise ValueError(f"unknown pool: {pool_name!r}")
 
 
 def _run_seed(candidate, baseline, include_clone, sampled, seed, cfg):
@@ -166,7 +182,9 @@ def evaluate_diagnose(
         tail: 尾部列表长度。
     """
     cfg = cfg or TournamentConfig()
-    pool = list(HOLDOUT_AGENTS if pool is None else pool)
+    if pool is None:
+        pool = _pool_agents(pool_name)
+    pool = list(pool)
     if size is not None and size <= 0:
         raise ValueError("size must be positive or None")
     seeds = tuple(seeds)
@@ -482,7 +500,7 @@ def main(argv=None):
 
     candidate = load_agent(args.agent)
     baseline = None if args.no_baseline else load_agent(args.baseline)
-    pool = list(HOLDOUT_AGENTS) if args.pool == "holdout" else canonical()
+    pool = _pool_agents(args.pool)
     cfg = TournamentConfig(
         hide_prob=args.hide_prob,
         hide_scope=args.hide_scope,
