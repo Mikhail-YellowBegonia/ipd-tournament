@@ -93,6 +93,29 @@ class UpdateTest(unittest.TestCase):
             for parameter, old in zip(policy.parameters(), before)
         ))
 
+    def test_update_with_imitation_loss(self):
+        torch.manual_seed(2)
+        policy = IPDPolicy()
+        episode = tiny_episode(policy, rounds=1)
+        for match in episode.matches:
+            match.labels = [0] * len(match.actions)
+        optimizer = torch.optim.Adam(policy.parameters(), lr=1e-3)
+        metrics = update_policy(
+            policy,
+            None,
+            optimizer,
+            episode,
+            TrainConfig(
+                batch_size=32,
+                next_move_coef=0.0,
+                contrastive_coef=0.0,
+                imitation_coef=0.5,
+            ),
+            generator=torch.Generator().manual_seed(0),
+        )
+        self.assertGreater(metrics["imitation_loss"], 0.0)
+        self.assertTrue(torch.isfinite(torch.tensor(metrics["loss"])))
+
     def test_update_without_auxiliary_losses(self):
         torch.manual_seed(1)
         policy = IPDPolicy()

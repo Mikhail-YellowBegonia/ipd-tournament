@@ -51,6 +51,12 @@ class TrainConfig:
     value_coef: float = 0.5
     next_move_coef: float = 0.1
     contrastive_coef: float = 0.05
+    # 在环内教师模仿正则：对当前状态加基线动作的交叉熵；0 表示关闭。
+    imitation_coef: float = 0.0
+    # 对"学生与教师意见不一致"的样本加权，缓解 AllD/AllC 等关键状态被平均掉。
+    hard_example_weight: float = 0.0
+    # 教师标签为"背叛"时的额外权重；对 AllC/TFT 终局这类稀有但高价值动作加权。
+    imitation_defect_weight: float = 1.0
     contrastive_temperature: float = 0.1
     contrastive_matches: int = 16
     max_grad_norm: float = 1.0
@@ -73,6 +79,9 @@ class TrainConfig:
             "value_coef",
             "next_move_coef",
             "contrastive_coef",
+            "imitation_coef",
+            "hard_example_weight",
+            "imitation_defect_weight",
             "shaping",
         ):
             if getattr(self, name) < 0:
@@ -195,6 +204,15 @@ def _batch_tensors(items, device=None):
     else:
         next_targets = torch.zeros(len(items), dtype=torch.long, device=device)
         next_flags = torch.zeros(len(items), dtype=torch.bool, device=device)
+    teacher_labels = None
+    if all(
+        len(match.labels) == len(match.actions) for match, _, _, _ in items
+    ):
+        teacher_labels = torch.tensor(
+            [match.labels[length] for match, _, _, _ in items],
+            dtype=torch.long,
+            device=device,
+        )
     return {
         "length": length,
         "own_history": own,
@@ -207,6 +225,7 @@ def _batch_tensors(items, device=None):
         "advantages": advantages,
         "next_targets": next_targets,
         "next_mask": next_flags,
+        "teacher_labels": teacher_labels,
         "old_log_probs": torch.tensor(
             [match.log_probs[length] for match, _, _, _ in items],
             dtype=torch.float32,
@@ -247,6 +266,7 @@ def update_policy(policy, predictor, optimizer, episode, config, generator=None)
         "entropy": 0.0,
         "next_move_loss": 0.0,
         "contrastive_loss": 0.0,
+        "imitation_loss": 0.0,
         "transitions": 0,
     }
     contrastive_views = None
@@ -293,6 +313,29 @@ def update_policy(policy, predictor, optimizer, episode, config, generator=None)
                     loss = loss + config.next_move_coef * next_loss
                     totals["next_move_loss"] += float(next_loss.item())
 
+            if config.imitation_coef > 0 and batch["teacher_labels"] is not None:
+                per_sample = F.cross_entropy(
+                    logits, batch["teacher_labels"], reduction="none"
+                )
+                if config.hard_example_weight > 0:
+                    mismatch = (
+                        logits.argmax(dim=-1) != batch["teacher_labels"]
+                    ).to(per_sample.dtype)
+                    per_sample = per_sample * (
+                        1.0 + config.hard_example_weight * mismatch
+                    )
+                if config.imitation_defect_weight != 1.0:
+                    weights = torch.ones_like(
+                        batch["teacher_labels"], dtype=per_sample.dtype
+                    )
+                    weights[batch["teacher_labels"] == 1] = (
+                        config.imitation_defect_weight
+                    )
+                    per_sample = per_sample * weights
+                imitation_loss = per_sample.mean()
+                loss = loss + config.imitation_coef * imitation_loss
+                totals["imitation_loss"] += float(imitation_loss.item())
+
             totals["loss"] += float(loss.item())
             totals["transitions"] += len(items)
             (loss / len(batches)).backward()
@@ -320,7 +363,14 @@ def update_policy(policy, predictor, optimizer, episode, config, generator=None)
     epoch_divisor = max(config.minibatch_epochs, 1)
     metrics = {
         key: totals[key] / batch_divisor
-        for key in ("loss", "policy_loss", "value_loss", "entropy", "next_move_loss")
+        for key in (
+            "loss",
+            "policy_loss",
+            "value_loss",
+            "entropy",
+            "next_move_loss",
+            "imitation_loss",
+        )
     }
     metrics["contrastive_loss"] = totals["contrastive_loss"] / epoch_divisor
     metrics["transitions"] = totals["transitions"] / epoch_divisor
@@ -479,6 +529,7 @@ def train_stage(
     log_path=None,
     verbose=True,
     resume_payload=None,
+    eval_opponents=None,
 ):
     """训练一个阶段（issue 接口 + 训练超参数）。
 
@@ -496,6 +547,8 @@ def train_stage(
         verbose: 是否打印进度。
         resume_payload: `load_checkpoint()` 返回的字典；给出时恢复预测头与
             优化器状态（策略权重由调用方先加载）。
+        eval_opponents: 评估用对手池；None 表示与训练池相同。课程/过采样训练
+            时应传入完整的阶段池，保证验收口径不变。
 
     Returns:
         指标历史列表（每项含 iteration、训练指标、可选 eval）。
@@ -503,12 +556,18 @@ def train_stage(
     train_config = train_config or TrainConfig()
     if num_episodes <= 0:
         raise ValueError("num_episodes must be positive")
+    eval_pool = opponents if eval_opponents is None else eval_opponents
     env = TrainingEnv(
         opponents,
         cfg=config,
         seed=train_config.seed,
         opponents_per_round=train_config.opponents_per_round,
     )
+    labeler = None
+    if train_config.imitation_coef > 0:
+        from ipd.training.imitation import BaselineTeacher
+
+        labeler = BaselineTeacher()
     predictor = (
         NextMovePredictor(policy.embed_dim)
         if train_config.next_move_coef > 0
@@ -539,7 +598,10 @@ def train_stage(
         )
         policy.eval()
         episode = env.rollout(
-            policy, shaping=train_config.shaping, generator=generator
+            policy,
+            shaping=train_config.shaping,
+            generator=generator,
+            labeler=labeler,
         )
         policy.train()
         metrics = update_policy(
@@ -552,7 +614,7 @@ def train_stage(
             policy.eval()
             eval_result = evaluate_policy(
                 policy,
-                opponents,
+                eval_pool,
                 config,
                 seeds=train_config.eval_seeds,
                 baseline=baseline,
@@ -629,6 +691,39 @@ def build_parser():
     parser.add_argument("--eval-every", type=int, default=None, help="0 表示只在训练后评估")
     parser.add_argument("--eval-seeds", default="0,1")
     parser.add_argument("--shaping", type=float, default=0.0)
+    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--entropy-coef", type=float, default=0.01)
+    parser.add_argument("--value-coef", type=float, default=0.5)
+    parser.add_argument("--next-move-coef", type=float, default=0.1)
+    parser.add_argument("--contrastive-coef", type=float, default=0.05)
+    parser.add_argument(
+        "--imitation-coef",
+        type=float,
+        default=0.0,
+        help="在环内教师模仿正则系数（需教师标签，>0 时启用基线标签）",
+    )
+    parser.add_argument(
+        "--hard-example-weight",
+        type=float,
+        default=0.0,
+        help="导师标签与学生预测不一致时的额外权重",
+    )
+    parser.add_argument(
+        "--imitation-defect-weight",
+        type=float,
+        default=1.0,
+        help="教师标签为背叛时的模仿损失权重（缓解稀有动作被平均）",
+    )
+    parser.add_argument("--batch-size", type=int, default=256)
+    parser.add_argument("--minibatch-epochs", type=int, default=1)
+    parser.add_argument("--gamma", type=float, default=1.0)
+    parser.add_argument("--max-grad-norm", type=float, default=1.0)
+    parser.add_argument(
+        "--init-coop-bias",
+        type=float,
+        default=0.0,
+        help="新建策略时把动作头固定为先验合作偏置 [b,-b]；续训时不生效",
+    )
     parser.add_argument("--checkpoint-dir", default="runs/rl")
     parser.add_argument("--log-path", default=None)
     parser.add_argument("--resume", default=None)
@@ -653,6 +748,13 @@ def main(argv=None):
     if args.resume:
         policy, payload = load_checkpoint(args.resume, policy=policy)
         print(f"resumed from {args.resume} (iteration {payload.get('iteration')})")
+    elif args.init_coop_bias:
+        with torch.no_grad():
+            policy.action_head.weight.zero_()
+            policy.action_head.bias.copy_(
+                torch.tensor([args.init_coop_bias, -args.init_coop_bias])
+            )
+        print(f"initialized action head with cooperation bias {args.init_coop_bias}")
     if args.no_baseline:
         baseline = None
     else:
@@ -664,6 +766,18 @@ def main(argv=None):
         threads=args.threads,
         opponents_per_round=args.opponents_per_round,
         shaping=args.shaping,
+        lr=args.lr,
+        entropy_coef=args.entropy_coef,
+        value_coef=args.value_coef,
+        next_move_coef=args.next_move_coef,
+        contrastive_coef=args.contrastive_coef,
+        imitation_coef=args.imitation_coef,
+        hard_example_weight=args.hard_example_weight,
+        imitation_defect_weight=args.imitation_defect_weight,
+        batch_size=args.batch_size,
+        minibatch_epochs=args.minibatch_epochs,
+        gamma=args.gamma,
+        max_grad_norm=args.max_grad_norm,
         eval_seeds=_parse_seeds(args.eval_seeds),
         eval_robustness=args.robustness,
     )
