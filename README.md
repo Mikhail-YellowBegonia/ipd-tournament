@@ -54,3 +54,4 @@ uv venv .venv && uv pip install --python .venv -r requirements-train.txt
 | [docs/design/architecture.md](docs/design/architecture.md) | 教师-学生架构、历史编码器、对手池、信誉塑形 |
 | [docs/decisions/](docs/decisions/) | 已做出的关键决策及理由 |
 | [docs/experiments/](docs/experiments/) | 实验记录 |
+| [docs/eval/holdout_pool_guidelines.md](docs/eval/holdout_pool_guidelines.md) | 留出测试池编写指南（issue #10） |
