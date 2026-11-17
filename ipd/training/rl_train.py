@@ -478,6 +478,7 @@ def train_stage(
     eval_every=None,
     log_path=None,
     verbose=True,
+    resume_payload=None,
 ):
     """训练一个阶段（issue 接口 + 训练超参数）。
 
@@ -493,6 +494,8 @@ def train_stage(
         eval_every: 每多少个赛季评估一次；None 或 0 表示不评估。
         log_path: JSONL 指标日志路径；None 不写。
         verbose: 是否打印进度。
+        resume_payload: `load_checkpoint()` 返回的字典；给出时恢复预测头与
+            优化器状态（策略权重由调用方先加载）。
 
     Returns:
         指标历史列表（每项含 iteration、训练指标、可选 eval）。
@@ -515,6 +518,13 @@ def train_stage(
         list(predictor.parameters()) if predictor is not None else []
     )
     optimizer = torch.optim.Adam(parameters, lr=train_config.lr)
+    if resume_payload:
+        predictor_state = resume_payload.get("predictor_state")
+        if predictor is not None and predictor_state is not None:
+            predictor.load_state_dict(predictor_state)
+        optimizer_state = resume_payload.get("optimizer_state")
+        if optimizer_state is not None:
+            optimizer.load_state_dict(optimizer_state)
     history = []
     best_score = None
     log_file = Path(log_path) if log_path else None
@@ -639,6 +649,7 @@ def main(argv=None):
         args.stage, seed=args.seed, variants=args.variants
     )
     policy = IPDPolicy()
+    payload = None
     if args.resume:
         policy, payload = load_checkpoint(args.resume, policy=policy)
         print(f"resumed from {args.resume} (iteration {payload.get('iteration')})")
@@ -676,6 +687,7 @@ def main(argv=None):
         eval_every=eval_every,
         log_path=args.log_path,
         verbose=True,
+        resume_payload=payload,
     )
     final = history[-1] if history else {}
     if "eval" in final:

@@ -198,6 +198,19 @@ class TrainStageTest(unittest.TestCase):
             )
             with torch.no_grad():
                 self.assertTrue(torch.allclose(policy(*args), restored(*args)))
+            # 断点续训：恢复预测头/优化器状态后能继续跑一个赛季。
+            resumed_history = train_stage(
+                1,
+                restored,
+                opponents,
+                tiny_config(rounds=1),
+                num_episodes=1,
+                train_config=TrainConfig(batch_size=32, seed=0),
+                eval_every=0,
+                verbose=False,
+                resume_payload=payload,
+            )
+            self.assertEqual(len(resumed_history), 1)
 
     def test_train_stage_writes_json_log(self):
         torch.manual_seed(0)
