@@ -52,6 +52,8 @@ class MatchTrajectory:
     log_probs: list = field(default_factory=list)
     entropies: list = field(default_factory=list)
     values: list = field(default_factory=list)
+    # 教师标签（DAgger 用）；为空表示"行为动作即标签"（教师自己跑的轨迹）。
+    labels: list = field(default_factory=list)
 
     @property
     def score(self):
@@ -166,13 +168,15 @@ class TrainingEnv:
             matches.append((match, opponent, opponent_own, opponent_opp))
         return matches
 
-    def rollout(self, policy, shaping=0.0, generator=None):
+    def rollout(self, policy, shaping=0.0, generator=None, labeler=None):
         """跑一个完整赛季（cfg.rounds 轮），返回 `Episode`。
 
         Args:
             policy: `IPDPolicy`（只前向采样，不更新参数）。
             shaping: 无端背叛惩罚系数 λ；0 表示纯单场得分。
             generator: torch 随机数生成器，控制动作采样。
+            labeler: 可选的教师策略（实现 `act_with_value`）；给出时为每个状态
+                记录教师动作到 `match.labels`，供 RL 的模仿正则项使用。
 
         Returns:
             `Episode`。
@@ -211,6 +215,17 @@ class TrainingEnv:
                 distribution = Categorical(probs=probs)
                 log_probs = distribution.log_prob(actions)
                 entropies = distribution.entropy()
+                labels = None
+                if labeler is not None:
+                    label_actions, _, _ = labeler.act_with_value(
+                        own_batch,
+                        opp_batch,
+                        my_tensor,
+                        opp_tensor,
+                        rs_batch,
+                        length,
+                    )
+                    labels = label_actions.tolist()
                 for position, (match, opponent, opp_own, opp_opp) in enumerate(round_items):
                     our_move = action_to_move(int(actions[position].item()))
                     # 对手只能看到 length 之前的动作，与课程接口一致。
@@ -245,6 +260,8 @@ class TrainingEnv:
                         match.values.append(float(values[position].item()))
                     else:
                         match.values.append(0.0)
+                    if labels is not None:
+                        match.labels.append(int(labels[position]))
             # 轮末统一写入历史（history_update="round"）。
             for match, opponent, _, _ in round_items:
                 their_moves = tuple(match.opp_moves)

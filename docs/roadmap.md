@@ -16,7 +16,7 @@
 | 5 | 手工基线（参照尺） | ✅ | issue #3（取代 #1，PR #11）；`ipd/agents/baseline.py`；实验 0004 |
 | 6 | 行为指纹与去重、多配比评估协议 | ✅ | issue #2（PR #12）；`ipd/eval`；159→45 簇、6 配比；实验 0005 |
 | 7 | 历史编码器 + 辅助损失训练代码 | ✅ | issue #5（PR #13）；`ipd/agents/encoder.py`、`ipd/training/auxiliary.py`；实验 0006 |
-| 8 | 强化学习训练循环（教师） | 🟡 | issue #6（PR #14 已合入）；policy/env/rl_train/schedule + 31 单测；阶段训练与验收待跑（ADR 0007） |
+| 8 | 强化学习训练循环（教师） | 🟡 | issue #6（PR #14 已合入）；纯 RL、BC/DAgger、RL 微调已跑；阶段 1 最佳单模型 45.38 / 集成 47.74 vs 基线 47.87，逐项 regret 未过（ADR 0008、实验 0008） |
 | 9 | 纯 Python 推理运行时与权重导出 | ⬜ | 测单次最坏耗时 |
 | 10 | 蒸馏流水线（DAgger） | ⬜ | 依赖 8、9 |
 | 10b | 进化策略微调（评测端） | ⬜ | 依赖 9；ADR 0005 |

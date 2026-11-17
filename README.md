@@ -42,7 +42,10 @@ uv venv .venv && uv pip install --python .venv -r requirements-train.txt
 .venv/bin/python -m unittest tests.test_training_policy tests.test_training_env tests.test_training_loop
 .venv/bin/python -m ipd.agents.bench_encoder     # 单次编码耗时基准（实验 0006）
 .venv/bin/python -m ipd.training.rl_train --stage 1 --iterations 2 --eval-every 0  # RL 流水线冒烟
-.venv/bin/python -m ipd.training.rl_train --stage 1 --eval-seeds 0,1              # 阶段 1 训练
+.venv/bin/python -m ipd.training.rl_train --stage 1 --eval-seeds 0,1              # 阶段 1 纯 RL
+.venv/bin/python -m ipd.training.imitation --stage 1 --seasons 20                  # BC/DAgger 热启动（实验 0008）
+.venv/bin/python -m ipd.training.rl_train --stage 1 --resume runs/rl/bc_stage1/stage1_bc.pt \
+    --iterations 60 --imitation-coef 0.2                                          # BC 初始化 + RL 微调
 .venv/bin/python -m ipd.pool.axl_perf
 ```
 

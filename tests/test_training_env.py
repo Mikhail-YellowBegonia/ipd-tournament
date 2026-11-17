@@ -15,6 +15,20 @@ if torch is not None:
     from ipd.training.policy import IPDPolicy
 
 
+class StubLabeler:
+    """固定教师动作的标签器。"""
+
+    def __init__(self, action):
+        self.action = action
+
+    def act_with_value(self, *encoder_inputs, **kwargs):
+        batch = int(encoder_inputs[0].shape[0])
+        actions = torch.full((batch,), self.action, dtype=torch.long)
+        probs = torch.zeros((batch, 2))
+        probs[:, self.action] = 1.0
+        return actions, probs, torch.zeros(batch)
+
+
 class StubPolicy:
     """固定动作的策略桩：只实现环境需要的 `act_with_value`。"""
 
@@ -126,6 +140,14 @@ class TrainingEnvTest(unittest.TestCase):
         self.assertAlmostEqual(
             sum(match_shaped.rewards), sum(match_plain.rewards) - 2.0 * 24
         )
+
+    def test_labeler_records_teacher_actions(self):
+        cfg = TournamentConfig(rounds=1, hide_prob=0.0, timeout=None)
+        env = TrainingEnv([make_agent("all_c")], cfg=cfg, seed=0, opponents_per_round=1)
+        env.reset(seed=0)
+        episode = env.rollout(StubPolicy(0), labeler=StubLabeler(1))
+        self.assertEqual(episode.matches[0].labels, [1] * rules.TURNS)
+        self.assertEqual(episode.matches[0].actions, [0] * rules.TURNS)
 
     def test_episode_shape_and_scores(self):
         cfg = TournamentConfig(rounds=3, hide_prob=0.0, timeout=None)
