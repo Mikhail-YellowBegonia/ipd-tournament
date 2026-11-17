@@ -38,6 +38,8 @@ python -m ipd.eval.protocol --agent tft gradual "end_defect(k=1)[tft]"  # 指纹
 # 训练端环境（axelrod 适配器等）
 uv venv .venv && uv pip install --python .venv -r requirements-train.txt
 .venv/bin/python -m unittest discover -s tests -t .
+.venv/bin/python -m unittest tests.test_encoder   # 历史编码器 + 辅助损失（torch）
+.venv/bin/python -m ipd.agents.bench_encoder     # 单次编码耗时基准（实验 0006）
 .venv/bin/python -m ipd.pool.axl_perf
 ```
 
