@@ -24,6 +24,7 @@ docs/
 debug_kit/       学生调试包原样存放（收到后）
 ipd/             代码包：sim（模拟器）、pool（对手池）、detectors（检测器）、agents（手工基线）……
 tests/           单元测试
+submission/      兜底提交包（独立标准库 strategy.py，可在调试包中验证）
 ```
 
 ## 常用命令
@@ -40,6 +41,7 @@ uv venv .venv && uv pip install --python .venv -r requirements-train.txt
 .venv/bin/python -m unittest discover -s tests -t .
 .venv/bin/python -m unittest tests.test_encoder   # 历史编码器 + 辅助损失（torch）
 .venv/bin/python -m unittest tests.test_training_policy tests.test_training_env tests.test_training_loop
+.venv/bin/python -m unittest tests.test_baseline_standalone  # 独立提交版基线等价性
 .venv/bin/python -m ipd.agents.bench_encoder     # 单次编码耗时基准（实验 0006）
 .venv/bin/python -m ipd.training.rl_train --stage 1 --iterations 2 --eval-every 0  # RL 流水线冒烟
 .venv/bin/python -m ipd.training.rl_train --stage 1 --eval-seeds 0,1              # 阶段 1 训练
