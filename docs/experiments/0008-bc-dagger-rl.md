@@ -1,7 +1,7 @@
 # BC/DAgger 热启动 + RL 微调（阶段 1）
 
 - 日期：2026-11-17
-- 提交（git commit）：待填（PR #16）
+- 提交（git commit）：`49afef5`（PR #16；rebase 合并后哈希可能变化）
 - 关联决策：ADR 0008（BC/DAgger 热启动）、ADR 0007（RL 训练循环）、
   ADR 0003（教师-学生）
 - 对应 issue：#6（阶段 1 训练）
