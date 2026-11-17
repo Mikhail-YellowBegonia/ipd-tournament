@@ -19,6 +19,7 @@ docs/
   reference/     外部资料原文（课程规则、调试包 README 等），只读
   design/        设计文档：问题分析、系统架构
   decisions/     决策记录（ADR），一个决策一个文件，只追加不改写
+  plans/         实施计划，一个阶段一个文件
   experiments/   实验日志，一个实验一个文件
   roadmap.md     任务清单、阻塞项、待确认问题
 debug_kit/       学生调试包原样存放（收到后）
@@ -55,6 +56,7 @@ uv venv .venv && uv pip install --python .venv -r requirements-train.txt
 | 文档 | 内容 |
 |---|---|
 | [docs/roadmap.md](docs/roadmap.md) | 现在能做什么、什么被阻塞 |
+| [docs/plans/0001-tail-first.md](docs/plans/0001-tail-first.md) | 尾部优先实施计划（ADR 0009） |
 | [docs/design/problem_analysis.md](docs/design/problem_analysis.md) | 收益结构、信誉机制、计算约束 |
 | [docs/design/architecture.md](docs/design/architecture.md) | 教师-学生架构、历史编码器、对手池、信誉塑形 |
 | [docs/decisions/](docs/decisions/) | 已做出的关键决策及理由 |

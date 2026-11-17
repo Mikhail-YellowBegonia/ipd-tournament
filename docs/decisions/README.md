@@ -23,3 +23,6 @@
 - [0004 信誉成本以闭环为主、塑形项为对冲](0004-reputation-shaping.md)
 - [0005 蒸馏后在评测端用进化策略微调](0005-es-finetune-on-eval-side.md)
 - [0006 分阶段引入对手复杂度，避免过早过拟合](0006-staged-opponent-complexity.md)
+- [0007 强化学习训练循环：REINFORCE + 价值基线 + 分阶段环境](0007-rl-training-loop.md)
+- 0008 BC/DAgger 热启动：在 PR #16 分支，尚未合并（不占 main 编号）。
+- [0009 尾部优先：规则层先于学习模型](0009-tail-first-rule-layer.md)
